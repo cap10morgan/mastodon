@@ -1,0 +1,20 @@
+{$MASTODON_DOMAIN} {
+  handle /api/v1/streaming* {
+    reverse_proxy mastodon-streaming:4000
+  }
+
+  handle {
+    reverse_proxy mastodon-web:3000
+  }
+}
+
+{$MASTODON_S3_DOMAIN} {
+  handle {
+    rewrite * /{$MASTODON_S3_BUCKET}{uri}
+    reverse_proxy {$MASTODON_S3_ENDPOINT} {
+      header_up -Host
+    }
+    header ?Cache-Control "public, max-age=315576000, immutable"
+  }
+}
+
