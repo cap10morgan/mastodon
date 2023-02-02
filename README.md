@@ -1,9 +1,11 @@
 # Mastodon docker-compose server
 
 This runs the Mastodon web server, streaming API, a Caddy proxy frontend,
-Redis, Elastisearch, and Sidekiq.
+Redis, Elastisearch, and Sidekiq in Docker.
 
 Expects to connect to a Linode managed Postgres cluster.
+
+Mostly copied and slightly adapted from [these blog posts](https://www.raeffs.dev/blog/self-hosting/2022-11-11-mastodon-with-docker/).
 
 ## Usage
 
