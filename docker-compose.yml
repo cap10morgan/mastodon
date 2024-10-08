@@ -1,14 +1,14 @@
-version: '3.8'
-
 # Mostly stolen from https://www.raeffs.dev/blog/self-hosting/2022-11-11-mastodon-with-docker/
 
 services:
   mastodon-redis:
     image: 'redis:alpine'
+    networks:
+      - internal_network
     command: 'redis-server --save 60 1 --loglevel warning'
     volumes:
       - 'mastodon-redis-volume:/data'
-    restart: on-failure
+    restart: always
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -16,6 +16,9 @@ services:
 
   mastodon-proxy:
     image: 'caddy:latest'
+    networks:
+      - internal_network
+      - external_network
     volumes:
       - 'caddy-data-volume:/data'
       - 'caddy-config-volume:/config'
@@ -28,7 +31,7 @@ services:
     ports:
       - '80:80'
       - '443:443'
-    restart: on-failure
+    restart: always
     depends_on:
       mastodon-web:
         condition: service_healthy
@@ -37,7 +40,10 @@ services:
     extends:
       file: 'docker-compose.base.yml'
       service: 'mastodon-base'
-    command: 'bash -c "/usr/local/bin/provision.sh; rm -f /mastodon/tmp/pids/server.pid; bundle exec rails s -p 3000"'
+    command: 'bash -c "/usr/local/bin/provision.sh; rm -f /mastodon/tmp/pids/server.pid; bundle exec puma -C config/puma.rb"'
+    networks:
+      - internal_network
+      - external_network
     volumes:
       - './provision.sh:/usr/local/bin/provision.sh:ro'
     environment:
@@ -46,9 +52,9 @@ services:
     depends_on:
       mastodon-redis:
         condition: service_healthy
-    restart: on-failure
+    restart: always
     healthcheck:
-      test: ['CMD-SHELL', 'wget -q --spider --proxy=off localhost:3000/health || exit 1']
+      test: ['CMD-SHELL', "curl -s --noproxy localhost localhost:3000/health | grep -q 'OK' || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -58,17 +64,26 @@ services:
       file: 'docker-compose.base.yml'
       service: 'mastodon-base'
     command: 'bundle exec sidekiq'
+    networks:
+      - internal_network
+      - external_network
     depends_on:
       mastodon-redis:
         condition: service_healthy
       mastodon-web:
         condition: service_healthy
-    restart: on-failure
+    restart: always
+    healthcheck:
+      test: ['CMD-SHELL', "ps aux | grep '[s]idekiq\ 6' || false"]
 
   mastodon-streaming:
     extends:
       file: 'docker-compose.base.yml'
       service: 'mastodon-base'
+    image: 'ghcr.io/mastodon/mastodon-streaming:v4.3'
+    networks:
+      - internal_network
+      - external_network
     environment:
       NODE_ENV: 'production'
       DB_SSLMODE: 'prefer'
@@ -76,16 +91,18 @@ services:
       - './provision-streaming.sh:/usr/local/bin/provision-streaming.sh:ro'
     command: 'bash -c "/usr/local/bin/provision-streaming.sh; node ./streaming"'
     healthcheck:
-      test: ['CMD-SHELL', 'wget -q --spider --proxy=off localhost:4000/api/v1/streaming/health || exit 1']
+      test: ['CMD-SHELL', "curl -s --noproxy localhost localhost:4000/api/v1/streaming/health | grep -q 'OK' || exit 1"]
     depends_on:
       mastodon-web:
         condition: service_healthy
-    restart: on-failure
+    restart: always
 
   mastodon-search:
-    image: 'docker.elastic.co/elasticsearch/elasticsearch:7.17.7'
+    image: 'docker.elastic.co/elasticsearch/elasticsearch:7.17.24'
     volumes:
       - 'mastodon-search-volume:/usr/share/elasticsearch/data'
+    networks:
+      - internal_network
     environment:
       - 'ES_JAVA_OPTS=-Xms512m -Xmx512m'
       - 'xpack.license.self_generated.type=basic'
@@ -103,7 +120,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 6
-    restart: on-failure
+    restart: always
 
 volumes:
   caddy-data-volume:
@@ -115,3 +132,7 @@ volumes:
   mastodon-redis-volume:
     external: true
 
+networks:
+  external_network:
+  internal_network:
+    internal: true

@@ -2,9 +2,10 @@ version: '3.8'
 
 services:
   mastodon-base:
-    image: 'tootsuite/mastodon'
+    image: 'ghcr.io/mastodon/mastodon:v4.3'
     volumes:
       - './pg-server-ca-certificate.crt:/mastodon/config/pg-server-ca-certificate.crt:ro'
+    env_file: .env
     environment:
       RAILS_ENV: 'production'
       LOCAL_DOMAIN: '${MASTODON_DOMAIN}'
